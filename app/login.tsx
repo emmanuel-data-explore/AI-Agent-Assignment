@@ -11,7 +11,7 @@ export default function LoginScreen() {
   return <ScreenContainer className="p-6" edges={["top", "bottom", "left", "right"]}>
     <View style={styles.center}>
       <View style={[styles.logo, { backgroundColor: colors.primary }]}><Text style={styles.logoText}>S</Text></View>
-      <Text style={[styles.title, { color: colors.foreground }]}>StudyFlow</Text>
+      <Text style={[styles.title, { color: colors.foreground }]}>SWEYY</Text>
       <Text style={[styles.subtitle, { color: colors.muted }]}>Turn study time into steady progress.</Text>
       <Pressable onPress={login} disabled={busy} style={({ pressed }) => [styles.button, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
         {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Continue with Manus</Text>}

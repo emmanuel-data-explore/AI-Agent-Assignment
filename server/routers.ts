@@ -18,10 +18,12 @@ async function syncPlanToSheets(plan: { summary: string; kind: "daily" | "weekly
   const token = process.env.GOOGLE_SHEETS_ACCESS_TOKEN ?? process.env.GOOGLE_WORKSPACE_ACCESS_TOKEN;
   const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
   if (!token || !spreadsheetId) return { synced: false, reason: "Google Sheets credentials are not configured." };
-  const values = [["Date", "Start hour", "Minutes", "Subject ID", "Topic", "Task ID", "Reason"], ...plan.sessions.map((s) => [s.date, s.startHour, s.minutes, s.subjectId, s.topic, s.taskId ?? "", s.reason])];
-  const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/StudyFlow!A1:append?valueInputOption=USER_ENTERED`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ values }) });
-  if (!response.ok) throw new Error(`Google Sheets sync failed: ${response.status}`);
-  return { synced: true, spreadsheetId };
+  const planValues = plan.sessions.map((s) => [s.date, s.startHour, s.minutes, s.subjectId, s.topic, s.taskId ?? "", s.reason, "", "", plan.kind]);
+  const taskValues = plan.sessions.map((s) => [s.date, s.subjectId, s.topic, s.minutes, "medium", "Open"]);
+  const append = async (range: string, values: unknown[][]) => fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ values }) });
+  const [planResponse, taskResponse] = await Promise.all([append("AI Plan!A5:J", planValues), append("Task!A3:F", taskValues)]);
+  if (!planResponse.ok || !taskResponse.ok) throw new Error(`Google Sheets sync failed: ${planResponse.status}/${taskResponse.status}`);
+  return { synced: true, spreadsheetId, tabs: ["AI Plan", "Task"] };
 }
 
 export const appRouter = router({
