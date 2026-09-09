@@ -1,48 +1,14 @@
-import { ScrollView, Text, View, TouchableOpacity } from "react-native";
-
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
-
-/**
- * Home Screen - NativeWind Example
- *
- * This template uses NativeWind (Tailwind CSS for React Native).
- * You can use familiar Tailwind classes directly in className props.
- *
- * Key patterns:
- * - Use `className` instead of `style` for most styling
- * - Theme colors: use tokens directly (bg-background, text-foreground, bg-primary, etc.); no dark: prefix needed
- * - Responsive: standard Tailwind breakpoints work on web
- * - Custom colors defined in tailwind.config.js
- */
-export default function HomeScreen() {
-  return (
-    <ScreenContainer className="p-6">
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 gap-8">
-          {/* Hero Section */}
-          <View className="items-center gap-2">
-            <Text className="text-4xl font-bold text-foreground">Welcome</Text>
-            <Text className="text-base text-muted text-center">
-              Edit app/(tabs)/index.tsx to get started
-            </Text>
-          </View>
-
-          {/* Example Card */}
-          <View className="w-full max-w-sm self-center bg-surface rounded-2xl p-6 shadow-sm border border-border">
-            <Text className="text-lg font-semibold text-foreground mb-2">NativeWind Ready</Text>
-            <Text className="text-sm text-muted leading-relaxed">
-              Use Tailwind CSS classes directly in your React Native components.
-            </Text>
-          </View>
-
-          {/* Example Button */}
-          <View className="items-center">
-            <TouchableOpacity className="bg-primary px-6 py-3 rounded-full active:opacity-80">
-              <Text className="text-background font-semibold">Get Started</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-    </ScreenContainer>
-  );
-}
+import { useColors } from "@/hooks/use-colors";
+import { useStudy } from "@/lib/study-store";
+import { useAuth } from "@/hooks/use-auth";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+export default function HomeScreen() { const c = useColors(); const { user } = useAuth(); const { tasks, subjects, sessions } = useStudy(); const done = tasks.filter(t => t.completed).length; const minutes = sessions.reduce((a, s) => a + s.minutes, 0);
+ return <ScreenContainer className="p-5"><ScrollView showsVerticalScrollIndicator={false}><View style={styles.row}><View><Text style={[styles.eyebrow, { color: c.primary }]}>YOUR STUDY SPACE</Text><Text style={[styles.title, { color: c.foreground }]}>Good morning{user?.name ? `, ${user.name.split(" ")[0]}` : ""}</Text></View><View style={[styles.avatar, { backgroundColor: c.primary }]}><Text style={styles.avatarText}>{user?.name?.[0] ?? "S"}</Text></View></View>
+ <View style={[styles.hero, { backgroundColor: c.primary }]}><View><Text style={styles.heroLabel}>TODAY&apos;S FOCUS</Text><Text style={styles.heroTitle}>{done}/{tasks.length} tasks complete</Text><Text style={styles.heroSub}>{minutes} minutes studied this week</Text></View><View style={styles.progressRing}><Text style={styles.ringText}>{tasks.length ? Math.round(done / tasks.length * 100) : 0}%</Text></View></View>
+ <View style={styles.sectionRow}><Text style={[styles.sectionTitle, { color: c.foreground }]}>Quick actions</Text></View><View style={styles.actions}><Pressable onPress={() => router.push("/(tabs)/timer" as any)} style={[styles.action, { backgroundColor: c.surface }]}><IconSymbol name="timer" size={24} color={c.primary} /><Text style={[styles.actionText, { color: c.foreground }]}>Start timer</Text></Pressable><Pressable onPress={() => router.push("/(tabs)/tasks" as any)} style={[styles.action, { backgroundColor: c.surface }]}><IconSymbol name="checkmark.circle.fill" size={24} color={c.success} /><Text style={[styles.actionText, { color: c.foreground }]}>View tasks</Text></Pressable></View><Pressable onPress={() => router.push("/plan" as any)} style={[styles.planAction,{backgroundColor:c.primary}]}><IconSymbol name="sparkles" size={22} color="#fff" /><Text style={styles.planActionText}>Build an AI study plan</Text><Text style={styles.planArrow}>→</Text></Pressable>
+ <View style={styles.sectionRow}><Text style={[styles.sectionTitle, { color: c.foreground }]}>Subjects</Text><Pressable onPress={() => router.push("/(tabs)/subjects" as any)}><Text style={{ color: c.primary, fontWeight: "700" }}>See all</Text></Pressable></View>{subjects.slice(0, 3).map(s => <View key={s.id} style={[styles.subject, { backgroundColor: c.surface }]}><View style={[styles.dot, { backgroundColor: s.color }]} /><View style={{ flex: 1 }}><Text style={[styles.subjectName, { color: c.foreground }]}>{s.name}</Text><Text style={{ color: c.muted }}>{s.topics.length} topics</Text></View><Text style={{ color: c.primary, fontWeight: "700" }}>{tasks.filter(t => t.subjectId === s.id && t.completed).length}/{tasks.filter(t => t.subjectId === s.id).length}</Text></View>)}
+ </ScrollView></ScreenContainer>; }
+const styles=StyleSheet.create({row:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginBottom:24},eyebrow:{fontSize:11,fontWeight:"800",letterSpacing:1.4},title:{fontSize:28,fontWeight:"800",marginTop:6},avatar:{width:44,height:44,borderRadius:16,alignItems:"center",justifyContent:"center"},avatarText:{color:"#fff",fontWeight:"800",fontSize:20},hero:{borderRadius:24,padding:22,flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginBottom:24},heroLabel:{color:"#DDE9FF",fontWeight:"800",fontSize:11,letterSpacing:1},heroTitle:{color:"#fff",fontWeight:"800",fontSize:24,marginTop:6},heroSub:{color:"#E5E7EB",marginTop:6},progressRing:{width:72,height:72,borderRadius:36,borderWidth:7,borderColor:"#B9B1FF",alignItems:"center",justifyContent:"center"},ringText:{color:"#fff",fontWeight:"800",fontSize:16},sectionRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginBottom:12,marginTop:6},sectionTitle:{fontSize:18,fontWeight:"800"},actions:{flexDirection:"row",gap:12,marginBottom:14},action:{flex:1,borderRadius:18,padding:16,gap:10},actionText:{fontWeight:"700"},planAction:{flexDirection:"row",alignItems:"center",gap:10,borderRadius:18,padding:16,marginBottom:22},planActionText:{color:"#fff",fontWeight:"800",flex:1},planArrow:{color:"#fff",fontSize:22,fontWeight:"800"},subject:{flexDirection:"row",alignItems:"center",gap:12,padding:16,borderRadius:18,marginBottom:10},dot:{width:12,height:12,borderRadius:6},subjectName:{fontWeight:"800",fontSize:15,marginBottom:3}});

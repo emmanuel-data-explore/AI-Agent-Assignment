@@ -1,92 +1,14 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, subjects, topics, tasks, sessions } from "../drizzle/schema";
 import { ENV } from "./_core/env";
-
 let _db: ReturnType<typeof drizzle> | null = null;
-
-// Lazily create the drizzle instance so local tooling can run without a DB.
-export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    try {
-      _db = drizzle(process.env.DATABASE_URL);
-    } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
-    }
-  }
-  return _db;
-}
-
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
-
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
-  }
-
-  try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
-    const updateSet: Record<string, unknown> = {};
-
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
-
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-
-    textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = "admin";
-      updateSet.role = "admin";
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
-  }
-}
-
-export async function getUserByOpenId(openId: string) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
-    return undefined;
-  }
-
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-
-  return result.length > 0 ? result[0] : undefined;
-}
-
-// TODO: add feature queries here as your schema grows.
+export async function getDb(){ if(!_db && process.env.DATABASE_URL){ try{_db=drizzle(process.env.DATABASE_URL)}catch(error){console.warn("[Database] Failed to connect:",error);_db=null} } return _db; }
+export async function upsertUser(user:InsertUser):Promise<void>{if(!user.openId)throw new Error("User openId is required for upsert");const db=await getDb();if(!db){console.warn("[Database] Cannot upsert user: database not available");return}const values:InsertUser={openId:user.openId,name:user.name??null,email:user.email??null,loginMethod:user.loginMethod??null,lastSignedIn:new Date()};await db.insert(users).values(values).onDuplicateKeyUpdate({set:{name:values.name,email:values.email,loginMethod:values.loginMethod,lastSignedIn:values.lastSignedIn}})}
+export async function getUserByOpenId(openId:string){const db=await getDb();if(!db)return undefined;const result=await db.select().from(users).where(eq(users.openId,openId)).limit(1);return result[0]}
+export async function listSubjects(userId:number){const db=await getDb();return db?db.select().from(subjects).where(eq(subjects.userId,userId)):[]}
+export async function listTasks(userId:number){const db=await getDb();return db?db.select().from(tasks).where(eq(tasks.userId,userId)).orderBy(desc(tasks.createdAt)):[]}
+export async function createTask(data:{userId:number;title:string;subjectId?:number;priority:"low"|"medium"|"high"}){const db=await getDb();if(!db)throw new Error("Database not available");await db.insert(tasks).values(data);return {success:true}}
+export async function toggleTask(userId:number,id:number,completed:boolean){const db=await getDb();if(!db)throw new Error("Database not available");await db.update(tasks).set({completed}).where(eq(tasks.id,id))}
+export async function addSession(data:{userId:number;subjectId?:number;minutes:number}){const db=await getDb();if(!db)throw new Error("Database not available");await db.insert(sessions).values(data);return {success:true}}
+export async function listSessions(userId:number){const db=await getDb();return db?db.select().from(sessions).where(eq(sessions.userId,userId)).orderBy(desc(sessions.startedAt)):[]}

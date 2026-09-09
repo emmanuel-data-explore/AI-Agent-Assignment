@@ -1,28 +1,9 @@
 import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
-
-export const appRouter = router({
-  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
-  system: systemRouter,
-  auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
-    }),
-  }),
-
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
-});
-
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import * as db from "./db";
+import { invokeLLM } from "./_core/llm";
+export const appRouter = router({ system: systemRouter, auth: router({ me: publicProcedure.query((opts)=>opts.ctx.user), logout: publicProcedure.mutation(({ctx})=>{const cookieOptions=getSessionCookieOptions(ctx.req);ctx.res.clearCookie(COOKIE_NAME,{...cookieOptions,maxAge:-1});return {success:true} as const;}) }), study: router({ subjects: protectedProcedure.query(({ctx})=>db.listSubjects(ctx.user.id)), tasks: protectedProcedure.query(({ctx})=>db.listTasks(ctx.user.id)), sessions: protectedProcedure.query(({ctx})=>db.listSessions(ctx.user.id)), createTask: protectedProcedure.input(z.object({title:z.string().min(1).max(255),subjectId:z.number().optional(),priority:z.enum(["low","medium","high"]).default("medium")})).mutation(({ctx,input})=>db.createTask({userId:ctx.user.id,...input})), toggleTask: protectedProcedure.input(z.object({id:z.number(),completed:z.boolean()})).mutation(({ctx,input})=>db.toggleTask(ctx.user.id,input.id,input.completed)), addSession: protectedProcedure.input(z.object({subjectId:z.number().optional(),minutes:z.number().int().positive()})).mutation(({ctx,input})=>db.addSession({userId:ctx.user.id,...input})), generatePlan: publicProcedure.input(z.object({tasks:z.array(z.string()).max(30)})).mutation(async({input})=>{try{const response=await invokeLLM({messages:[{role:"system",content:"Create a concise, realistic study plan. Return 3 numbered steps with estimated minutes."},{role:"user",content:`Tasks: ${input.tasks.join(", ")}`} ]});return response.choices?.[0]?.message?.content ?? "Start with your highest-priority task for 25 minutes."}catch{return "Start with your highest-priority task for 25 minutes, then review and practice."}}) }) });
 export type AppRouter = typeof appRouter;
