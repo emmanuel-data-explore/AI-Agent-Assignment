@@ -1,0 +1,47 @@
+import { invokeLLM } from "./_core/llm";
+
+export type PlannerSubject = { id: string; name: string; topics: string[]; difficulty: number; examDate?: string };
+export type PlannerTask = { id: string; title: string; subjectId: string; due: string; priority: "low" | "medium" | "high"; completed: boolean };
+export type PlannerHistory = { subjectId: string; topic?: string; minutes: number; date: string };
+export type PlannerCalendarBlock = { date: string; startHour: number; endHour: number; title?: string };
+export type PlannerInput = { kind: "daily" | "weekly"; today: string; subjects: PlannerSubject[]; tasks: PlannerTask[]; history: PlannerHistory[]; dailyMinutes: number; weeklyMinutes: number; calendarBlocks: PlannerCalendarBlock[] };
+export type PlannedSession = { date: string; startHour: number; minutes: number; subjectId: string; topic: string; taskId?: string; reason: string };
+
+const DAY_MS = 86400000;
+function dateAt(base: string, offset: number) { return new Date(new Date(`${base}T12:00:00Z`).getTime() + offset * DAY_MS).toISOString().slice(0, 10); }
+function hoursUsed(blocks: PlannerCalendarBlock[], date: string) { return blocks.filter((b) => b.date === date).reduce((total, b) => total + Math.max(0, b.endHour - b.startHour), 0); }
+function candidateItems(input: PlannerInput) { return input.tasks.filter((t) => !t.completed).flatMap((task) => { const subject = input.subjects.find((s) => s.id === task.subjectId); return subject?.topics.length ? subject.topics.map((topic) => ({ id: `${task.id}:${topic}`, taskId: task.id, subjectId: subject.id, topic, title: task.title, priority: task.priority, difficulty: subject.difficulty, examDate: subject.examDate })) : []; }); }
+
+export async function generateGroundedPlan(input: PlannerInput) {
+  const candidates = candidateItems(input);
+  if (!candidates.length) return { sessions: [] as PlannedSession[], summary: "No incomplete tasks with known topics are available." };
+  const days = input.kind === "daily" ? 1 : 7;
+  const perDay = Math.min(180, Math.max(25, input.dailyMinutes));
+  const weeklyCap = Math.min(input.kind === "daily" ? perDay : input.weeklyMinutes, days * perDay, days * 180);
+  const availableByDay = Array.from({ length: days }, (_, offset) => { const date = dateAt(input.today, offset); const blocked = hoursUsed(input.calendarBlocks, date) * 60; return { date, minutes: Math.max(0, Math.min(perDay, perDay - blocked)) }; });
+  const availableTotal = availableByDay.reduce((total, day) => total + day.minutes, 0);
+  const hardCap = Math.min(availableTotal, weeklyCap);
+  const allowed = candidates.slice(0, 50);
+  let ordered = allowed;
+  try {
+    const response = await invokeLLM({ model: "gpt-5-mini", messages: [
+      { role: "system", content: "You are a study planning optimizer. Use ONLY the supplied candidate IDs. Never invent subjects, topics, tasks, exam dates, or durations. Return JSON with orderedIds: string[]. Prioritize high priority tasks, harder subjects, nearer exam dates, and topics with less recent history." },
+      { role: "user", content: JSON.stringify({ candidates: allowed, history: input.history, today: input.today, availableMinutes: hardCap }) },
+    ], response_format: { type: "json_object" }, reasoning: { effort: "minimal" } });
+    const raw = response.choices?.[0]?.message?.content; const parsed = typeof raw === "string" ? JSON.parse(raw) as { orderedIds?: string[] } : {};
+    const ranked = (parsed.orderedIds ?? []).map((id) => allowed.find((item) => item.id === id)).filter(Boolean);
+    ordered = [...ranked, ...allowed.filter((item) => !ranked.some((rankedItem) => rankedItem?.id === item.id))] as typeof allowed;
+  } catch { /* deterministic ordering below remains safe */ }
+  ordered = [...ordered].sort((a, b) => (b.priority === "high" ? 2 : b.priority === "medium" ? 1 : 0) - (a.priority === "high" ? 2 : a.priority === "medium" ? 1 : 0) || b.difficulty - a.difficulty);
+  const sessions: PlannedSession[] = []; let remaining = hardCap; let itemIndex = 0;
+  for (const day of availableByDay) {
+    let cursor = 17;
+    while (day.minutes > 0 && remaining > 0 && itemIndex < ordered.length) {
+      const item = ordered[itemIndex++]; const minutes = Math.min(50, day.minutes, remaining); if (minutes < 25) break;
+      const examReason = item.examDate ? `Exam target ${item.examDate}; ` : "";
+      sessions.push({ date: day.date, startHour: cursor, minutes, subjectId: item.subjectId, topic: item.topic, taskId: item.taskId, reason: `${examReason}${item.priority} priority · difficulty ${item.difficulty}/5` });
+      cursor += Math.ceil(minutes / 60) + 1; day.minutes -= minutes; remaining -= minutes;
+    }
+  }
+  return { sessions, summary: sessions.length ? `Scheduled ${sessions.reduce((n, s) => n + s.minutes, 0)} minutes across ${sessions.length} grounded sessions.` : "No feasible sessions fit the available study time." };
+}

@@ -1,0 +1,42 @@
+{
+  "valueInputOption": "USER_ENTERED",
+  "data": [
+    {
+      "range": "AI Plan!A1:J4",
+      "values": [
+        ["STUDYFLOW AI PLAN", "", "", "", "", "", "", "", "", ""],
+        ["Status", "Waiting for real student data", "", "", "", "", "", "", "", ""],
+        ["Grounding rule", "This plan will only use subjects/topics/tasks/exams/study log entries entered in the four source tabs.", "", "", "", "", "", "", "", ""],
+        ["Date", "Start hour", "Minutes", "Subject", "Topic", "Task", "Reason", "Done?", "Notes", "Plan type"]
+      ]
+    },
+    {
+      "range": "Monthly History!A1:I6",
+      "values": [
+        ["MONTHLY STUDY HISTORY", "", "", "", "", "", "", "", ""],
+        ["Month", "Minutes studied", "Sessions", "Tasks completed", "Average score", "CSV file name", "Archived?", "Notes", ""],
+        ["YYYY-MM", "Enter formula or app value", "Enter formula or app value", "Enter formula or app value", "Enter formula or app value", "studyflow-YYYY-MM.csv", "No", "Enter a month in A3 to calculate a report", ""],
+        ["History controls", "Keep one row per month. Copy a row before clearing source history if you want an archive.", "", "", "", "", "", "", ""],
+        ["Deletion rule", "Delete/archive only the month row or source history rows you own; do not delete the whole workbook.", "", "", "", "", "", "", ""],
+        ["App sync", "The mobile app can append generated plan sessions and export CSV history into this structure.", "", "", "", "", "", "", ""]
+      ]
+    },
+    {
+      "range": "Subject!A2:E2",
+      "values": [["Enter only real subjects", "Enter unit", "Enter topic", "1-5", "0-100%"]]
+    },
+    {
+      "range": "Exam!A2:D2",
+      "values": [["Enter only real subject", "Enter exam name", "YYYY-MM-DD", "high/medium/low"]]
+    },
+    {
+      "range": "Task!A2:F2",
+      "values": [["YYYY-MM-DD", "Subject from Subject tab", "Topic from Subject tab", "Minutes", "high/medium/low", "Open/Done"]]
+    },
+    {
+      "range": "Study Log!A2:E2",
+      "values": [["YYYY-MM-DD", "Subject from Subject tab", "Topic from Subject tab", "Minutes", "Score 0-100"]]
+    }
+  ],
+  "includeValuesInResponse": false
+}
