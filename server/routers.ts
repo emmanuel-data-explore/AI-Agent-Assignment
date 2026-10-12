@@ -6,6 +6,7 @@ import { z } from "zod";
 import * as db from "./db";
 import { generateGroundedPlan } from "./plan-engine";
 import { storeGeneratedPlan, supabaseConfigured } from "./supabase";
+import { parseStudySheets } from "./sheets-import";
 
 const subjectSchema = z.object({ id: z.string(), name: z.string(), topics: z.array(z.string()), difficulty: z.number().int().min(1).max(5), examDate: z.string().optional() });
 const taskSchema = z.object({ id: z.string(), title: z.string(), subjectId: z.string(), due: z.string(), priority: z.enum(["low", "medium", "high"]), completed: z.boolean() });
@@ -14,6 +15,22 @@ const reviewSchema = z.object({ subjectId: z.string(), topic: z.string(), diffic
 const calendarBlockSchema = z.object({ date: z.string(), startHour: z.number().min(0).max(23), endHour: z.number().min(0).max(23), title: z.string().optional() });
 const planInputSchema = z.object({ kind: z.enum(["daily", "weekly"]), today: z.string(), subjects: z.array(subjectSchema).max(100), tasks: z.array(taskSchema).max(200), history: z.array(historySchema).max(500), reviews: z.array(reviewSchema).max(500), dailyMinutes: z.number().int().min(25).max(180), weeklyMinutes: z.number().int().min(25).max(1260), calendarBlocks: z.array(calendarBlockSchema).max(200) });
 const sessionOutputSchema = z.object({ date: z.string(), startHour: z.number(), minutes: z.number(), subjectId: z.string(), topic: z.string(), taskId: z.string().optional(), reason: z.string() });
+
+async function importFromSheets() {
+  const token = process.env.GOOGLE_SHEETS_ACCESS_TOKEN ?? process.env.GOOGLE_WORKSPACE_ACCESS_TOKEN;
+  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+  if (!token || !spreadsheetId) return { imported: false, reason: "Google Sheets credentials are not configured." } as const;
+  const tabs = ["Subject", "Exam", "Task", "Study Log"];
+  const readTab = async (tab: string) => {
+    const range = encodeURIComponent(`${tab}!A1:Z1000`);
+    const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) throw new Error(`Google Sheets import failed for ${tab}: ${response.status}`);
+    const data = await response.json() as { values?: string[][] };
+    return data.values ?? [];
+  };
+  const [subjectRows, examRows, taskRows, logRows] = await Promise.all(tabs.map(readTab));
+  return { imported: true, spreadsheetId, data: parseStudySheets(subjectRows, examRows, taskRows, logRows) } as const;
+}
 
 async function syncPlanToSheets(plan: { summary: string; kind: "daily" | "weekly"; subjects: Array<z.infer<typeof subjectSchema>>; sessions: Array<z.infer<typeof sessionOutputSchema>> }) {
   const token = process.env.GOOGLE_SHEETS_ACCESS_TOKEN ?? process.env.GOOGLE_WORKSPACE_ACCESS_TOKEN;
@@ -51,6 +68,7 @@ export const appRouter = router({
       const data = await response.json() as { items?: Array<{ summary?: string; start?: { dateTime?: string }; end?: { dateTime?: string } }> }; const blocks = (data.items ?? []).filter((event) => event.start?.dateTime && event.end?.dateTime).map((event) => { const startTime = new Date(event.start!.dateTime!); const endTime = new Date(event.end!.dateTime!); return { date: startTime.toISOString().slice(0, 10), startHour: startTime.getUTCHours(), endHour: Math.max(startTime.getUTCHours() + 1, endTime.getUTCHours()), title: event.summary ?? "Busy" }; }); return { blocks, source: "Google Calendar" as const };
     }),
     syncPlanToSheets: protectedProcedure.input(z.object({ kind: z.enum(["daily", "weekly"]), summary: z.string(), subjects: z.array(subjectSchema), sessions: z.array(sessionOutputSchema) })).mutation(({ input }) => syncPlanToSheets(input)),
+    importFromSheets: protectedProcedure.input(z.object({}).optional()).mutation(() => importFromSheets()),
     calendarStatus: protectedProcedure.query(() => ({ available: Boolean(process.env.GOOGLE_CALENDAR_ACCESS_TOKEN), source: process.env.GOOGLE_CALENDAR_ACCESS_TOKEN ? "Google Calendar" : "manual calendar blocks" })),
   }),
 });
